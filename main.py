@@ -9,7 +9,6 @@ import subprocess
 import threading
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 BOTS_DIR = "bots"
@@ -93,4 +92,5 @@ async def create(token: str = Form(...)):
             "bot_link": f"https://t.me/{username}"
         })
     except Exception as e:
+
         return HTMLResponse(f"<h2>Ошибка: {e}</h2><a href='/'>Назад</a>", status_code=400)
