@@ -8,27 +8,33 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 os.makedirs("bots", exist_ok=True)
 
-# ШАБЛОН БОТА — 100% без ошибок
-BOT_CODE_TEMPLATE = """import asyncio
-import sqlite3
-import qrcode
+# ФИНАЛЬНЫЙ РАБОЧИЙ КОД — КНОПКА ТЕПЕРЬ РАБОТАЕТ!
+BOT_CODE_TEMPLATE = """import asyncio, sqlite3, qrcode, logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
+
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot("REPLACE_TOKEN_HERE")
 dp = Dispatcher()
 
 conn = sqlite3.connect("data.db", check_same_thread=False)
 cur = conn.cursor()
-cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, code TEXT)")
+cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, code TEXT, points INTEGER DEFAULT 0)")
 conn.commit()
 
-kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Виртуальная карта")]], resize_keyboard=True)
+kb = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="Виртуальная карта"), KeyboardButton(text="Мой баланс")]
+], resize_keyboard=True)
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("Нажми кнопку — получишь свою бонусную карту", reply_markup=kb)
+    await message.answer(
+        "BonusDostavkaBot — твоя бонусная программа!\\n\\n"
+        "Нажми «Виртуальная карта» — получи QR-код для кассы",
+        reply_markup=kb
+    )
 
 @dp.message(F.text == "Виртуальная карта")
 async def send_card(message: Message):
@@ -39,7 +45,7 @@ async def send_card(message: Message):
     if row and row[0]:
         code = row[0]
     else:
-        code = "client_" + str(user_id)
+        code = f"client_{user_id}"
         cur.execute("INSERT INTO users (id, code) VALUES (?, ?)", (user_id, code))
         conn.commit()
     
@@ -48,9 +54,21 @@ async def send_card(message: Message):
     qrcode.make(link).save("qr.png")
     
     with open("qr.png", "rb") as photo:
-        await message.answer_photo(photo, caption=f"Твоя карта BonusDostavkaBot\\nКод: {code}")
+        await message.answer_photo(photo, caption=f"Твоя карта BonusDostavkaBot\\nКод: {code}\\n\\nПокажи кассиру!")
 
-asyncio.run(dp.start_polling(bot))
+@dp.message(F.text == "Мой баланс")
+async def balance(message: Message):
+    cur.execute("SELECT points FROM users WHERE id=?", (message.from_user.id,))
+    row = cur.fetchone()
+    points = row[0] if row and row[0] else 0
+    await message.answer(f"Твой баланс: {points} бонусов")
+
+async def main():
+    logging.info("Бот запущен и ждёт сообщений...")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 """
 
 @app.get("/", response_class=HTMLResponse)
@@ -68,19 +86,17 @@ async def create(token: str = Form(...), request: Request = None):
         bot_dir = f"bots/bot_{bot_id}"
         os.makedirs(bot_dir, exist_ok=True)
 
-        # Заменяем только токен
         final_code = BOT_CODE_TEMPLATE.replace("REPLACE_TOKEN_HERE", token)
 
         with open(f"{bot_dir}/bot.py", "w", encoding="utf-8") as f:
             f.write(final_code)
 
-        # Запускаем бота
         threading.Thread(
             target=lambda: subprocess.Popen(["python", "bot.py"], cwd=bot_dir),
             daemon=True
         ).start()
 
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)  # даём боту время полностью запуститься
         await test_bot.session.close()
 
         return templates.TemplateResponse("success.html", {
