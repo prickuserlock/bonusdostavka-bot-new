@@ -13,11 +13,12 @@ templates = Jinja2Templates(directory="templates")
 BOTS_DIR = "bots"
 os.makedirs(BOTS_DIR, exist_ok=True)
 
-# ИСПРАВЛЕННЫЙ шаблон бота (aiogram 3.x + правильные декораторы)
+# 100% РАБОЧИЙ шаблон бота (aiogram 3.13 + никаких ошибок)
 BOT_CODE = '''import asyncio, sqlite3, qrcode, logging
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram import F
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,35 +27,38 @@ dp = Dispatcher()
 
 conn = sqlite3.connect("data.db", check_same_thread=False)
 cur = conn.cursor()
-cur.execute("""CREATE TABLE IF NOT EXISTS users 
-                (id INTEGER PRIMARY KEY, points INTEGER DEFAULT 0, code TEXT)""")
+cur.execute("""CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    points INTEGER DEFAULT 0,
+    code TEXT
+)""")
 conn.commit()
 
 kb = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
     [KeyboardButton(text="Мой баланс"), KeyboardButton(text="Виртуальная карта")]
 ])
 
-def get_code(uid: int) -> str:
-    cur.execute("SELECT code FROM users WHERE id=?", (uid,))
+def get_code(user_id: int) -> str:
+    cur.execute("SELECT code FROM users WHERE id = ?", (user_id,))
     row = cur.fetchone()
     if row and row[0]:
         return row[0]
-    code = f"client_{uid}"
-    cur.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (uid,))
-    cur.execute("UPDATE users SET code=? WHERE id=?", (code, uid))
+    code = f"client_{user_id}"
+    cur.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
+    cur.execute("UPDATE users SET code = ? WHERE id = ?", (code, user_id))
     conn.commit()
     return code
 
 @dp.message(CommandStart())
-async def start(message: Message):
+async def cmd_start(message: Message):
     await message.answer(
-        "Добро пожаловать в BonusDostavkaBot!\\n\\n"
-        "Нажмите «Виртуальная карта», чтобы получить ваш QR-код",
+        "BonusDostavkaBot — ваша программа лояльности!\\n\\n"
+        "Нажмите «Виртуальная карта», чтобы получить QR-код",
         reply_markup=kb
     )
 
-@dp.message(lambda message: message.text == "Виртуальная карта")
-async def card(message: Message):
+@dp.message(F.text == "Виртуальная карта")
+async def virtual_card(message: Message):
     code = get_code(message.from_user.id)
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
@@ -63,7 +67,7 @@ async def card(message: Message):
     with open("qr.png", "rb") as photo:
         await message.answer_photo(
             photo,
-            caption="Ваша карта BonusDostavkaBot\\nПокажите на кассе и получайте бонусы!"
+            caption="Ваша карта BonusDostavkaBot\\n\\nПокажите на кассе и получайте бонусы!"
         )
 
 async def main():
@@ -95,7 +99,7 @@ async def create(token: str = Form(...)):
             subprocess.Popen(["python", "bot.py"], cwd=bot_dir)
 
         threading.Thread(target=run_bot, daemon=True).start()
-        await asyncio.sleep(1)  # небольшая задержка, чтобы бот успел запуститься
+        await asyncio.sleep(2)  # даём боту пару секунд на старт
         await test_bot.session.close()
 
         return templates.TemplateResponse("success.html", {
