@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 import asyncio, sqlite3, qrcode, logging, os
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -42,7 +42,7 @@ async def run_bot(token: str):
 
     @dp.message(CommandStart())
     async def start(message: Message):
-        await message.answer("BonusDostavkaBot готов!\nНажми кнопку ниже", reply_markup=kb)
+        await message.answer("BonusDostavkaBot готов!\nНажми «Виртуальная карта»", reply_markup=kb)
 
     @dp.message(F.text == "Виртуальная карта")
     async def card(message: Message):
@@ -60,11 +60,11 @@ async def run_bot(token: str):
         qr_path = f"qr_{bot_id}_{user_id}.png"
         qrcode.make(link).save(qr_path)
 
-        # Используем InputFile для корректной отправки
-        photo = InputFile(qr_path)
+        # ВОТ ЭТО ГЛАВНОЕ ИСПРАВЛЕНИЕ:
+        photo = FSInputFile(qr_path)
         await message.answer_photo(photo, caption=f"Твоя карта BonusDostavkaBot\nКод: {code}")
 
-        os.remove(qr_path)  # чистим файл
+        os.remove(qr_path)  # чистим за собой
 
     @dp.message(F.text == "Мой баланс")
     async def balance(message: Message):
@@ -83,12 +83,10 @@ async def index(request: Request):
 @app.post("/create")
 async def create(token: str = Form(...), request: Request = None):
     try:
-        # Проверяем токен
         test_bot = Bot(token)
         me = await test_bot.get_me()
         await test_bot.session.close()
 
-        # Запускаем бота
         asyncio.create_task(run_bot(token))
 
         return templates.TemplateResponse("success.html", {
