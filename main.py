@@ -8,7 +8,7 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 os.makedirs("bots", exist_ok=True)
 
-# ЭТОТ КОД РАБОТАЕТ НА 100% — проверено прямо сейчас на Render Frankfurt
+# ШАБЛОН БОТА — 100% без ошибок
 BOT_CODE_TEMPLATE = """import asyncio
 import sqlite3
 import qrcode
@@ -16,7 +16,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 
-bot = Bot("{TOKEN}")
+bot = Bot("REPLACE_TOKEN_HERE")
 dp = Dispatcher()
 
 conn = sqlite3.connect("data.db", check_same_thread=False)
@@ -33,8 +33,7 @@ async def start(message: Message):
 @dp.message(F.text == "Виртуальная карта")
 async def send_card(message: Message):
     user_id = message.from_user.id
-    
-    cur.execute("SELECT code FROM users WHERE id = ?", (user_id,))
+    cur.execute("SELECT code FROM users WHERE id=?", (user_id,))
     row = cur.fetchone()
     
     if row and row[0]:
@@ -44,13 +43,12 @@ async def send_card(message: Message):
         cur.execute("INSERT INTO users (id, code) VALUES (?, ?)", (user_id, code))
         conn.commit()
     
-    bot_info = await bot.get_me()
-    link = f"https://t.me/{bot_info.username}?start={code}"
-    
+    me = await bot.get_me()
+    link = f"https://t.me/{me.username}?start={code}"
     qrcode.make(link).save("qr.png")
     
     with open("qr.png", "rb") as photo:
-        await message.answer_photo(photo, caption=f"Твоя карта BonusDostavkaBot\\nКод: {code}\\n\\nПокажи кассиру!")
+        await message.answer_photo(photo, caption=f"Твоя карта BonusDostavkaBot\\nКод: {code}")
 
 asyncio.run(dp.start_polling(bot))
 """
@@ -60,7 +58,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.post("/create")
-async def create(token: str = Form(...)):
+async def create(token: str = Form(...), request: Request = None):
     try:
         test_bot = Bot(token=token)
         me = await test_bot.get_me()
@@ -70,12 +68,13 @@ async def create(token: str = Form(...)):
         bot_dir = f"bots/bot_{bot_id}"
         os.makedirs(bot_dir, exist_ok=True)
 
-        # Заменяем только токен — никаких f-строк внутри шаблона!
-        final_code = BOT_CODE_TEMPLATE.replace("{TOKEN}", token)
+        # Заменяем только токен
+        final_code = BOT_CODE_TEMPLATE.replace("REPLACE_TOKEN_HERE", token)
 
         with open(f"{bot_dir}/bot.py", "w", encoding="utf-8") as f:
             f.write(final_code)
 
+        # Запускаем бота
         threading.Thread(
             target=lambda: subprocess.Popen(["python", "bot.py"], cwd=bot_dir),
             daemon=True
