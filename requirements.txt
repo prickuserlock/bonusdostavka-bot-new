@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+aiogram==3.13.1
+qrcode[pil]
+jinja2
+python-multipart
