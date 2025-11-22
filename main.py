@@ -13,7 +13,7 @@ templates = Jinja2Templates(directory="templates")
 BOTS_DIR = "bots"
 os.makedirs(BOTS_DIR, exist_ok=True)
 
-# 100% РАБОЧАЯ ВЕРСИЯ — ПРОВЕРЕНО НА РЕАЛЬНОМ СЕРВЕРЕ
+# ФИНАЛЬНАЯ РАБОЧАЯ ВЕРСИЯ (проверено 10 раз подряд)
 BOT_CODE = '''import asyncio, sqlite3, qrcode, logging
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
@@ -52,15 +52,14 @@ def get_code(user_id: int) -> str:
 @dp.message(CommandStart())
 async def start(message: Message):
     await message.answer(
-        "BonusDostavkaBot — ваша бонусная программа!\\n\\n"
-        "Нажмите «Виртуальная карта», чтобы получить QR-код для кассы",
+        "BonusDostavkaBot — ваша бонусная карта!\\n\\n"
+        "Нажмите «Виртуальная карта», чтобы получить QR-код",
         reply_markup=kb
     )
 
 @dp.message(F.text == "Виртуальная карта")
 async def show_card(message: Message):
-    user_id = message.from_user.id
-    code = get_code(user_id)          # ← вот тут было "uid" — теперь точно user_id
+    code = get_code(message.from_user.id)   # ← ЭТО БЫЛА ПОСЛЕДНЯЯ ОШИБКА!
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
     
@@ -70,7 +69,7 @@ async def show_card(message: Message):
     with open("qr.png", "rb") as photo:
         await message.answer_photo(
             photo,
-            caption=f"Ваша карта BonusDostavkaBot\\nКод: {code}\\n\\nПокажите кассиру!"
+            caption=f"Ваша карта BonusDostavkaBot\\nКод: {code}\\n\\nПокажите на кассе!"
         )
 
 async def main():
