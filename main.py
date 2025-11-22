@@ -13,7 +13,7 @@ templates = Jinja2Templates(directory="templates")
 BOTS_DIR = "bots"
 os.makedirs(BOTS_DIR, exist_ok=True)
 
-# 100% РАБОЧИЙ шаблон бота (aiogram 3.13 + никаких ошибок)
+# ФИНАЛЬНАЯ ВЕРСИЯ — 100% РАБОТАЕТ
 BOT_CODE = '''import asyncio, sqlite3, qrcode, logging
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot("{token}")
 dp = Dispatcher()
 
+# База данных
 conn = sqlite3.connect("data.db", check_same_thread=False)
 cur = conn.cursor()
 cur.execute("""CREATE TABLE IF NOT EXISTS users (
@@ -34,40 +35,44 @@ cur.execute("""CREATE TABLE IF NOT EXISTS users (
 )""")
 conn.commit()
 
+# Клавиатура
 kb = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
     [KeyboardButton(text="Мой баланс"), KeyboardButton(text="Виртуальная карта")]
 ])
 
-def get_code(user_id: int) -> str:
-    cur.execute("SELECT code FROM users WHERE id = ?", (user_id,))
+def get_code(uid: int) -> str:
+    cur.execute("SELECT code FROM users WHERE id = ?", (uid,))
     row = cur.fetchone()
     if row and row[0]:
         return row[0]
-    code = f"client_{user_id}"
-    cur.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (user_id,))
-    cur.execute("UPDATE users SET code = ? WHERE id = ?", (code, user_id))
+    code = f"client_{uid}"
+    cur.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (uid,))
+    cur.execute("UPDATE users SET code = ? WHERE id = ?", (code, uid))
     conn.commit()
     return code
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
+async def start(message: Message):
     await message.answer(
-        "BonusDostavkaBot — ваша программа лояльности!\\n\\n"
-        "Нажмите «Виртуальная карта», чтобы получить QR-код",
+        "BonusDostavkaBot — ваша бонусная карта!\\n\\n"
+        "Нажмите «Виртуальная карта» и покажите QR-код на кассе",
         reply_markup=kb
     )
 
 @dp.message(F.text == "Виртуальная карта")
-async def virtual_card(message: Message):
-    code = get_code(message.from_user.id)
+async def show_card(message: Message):
+    uid = message.from_user.id
+    code = get_code(uid)
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start={code}"
+    
     qr = qrcode.make(link)
     qr.save("qr.png")
+    
     with open("qr.png", "rb") as photo:
         await message.answer_photo(
             photo,
-            caption="Ваша карта BonusDostavkaBot\\n\\nПокажите на кассе и получайте бонусы!"
+            caption=f"Ваша карта BonusDostavkaBot\\nКод: {code}"
         )
 
 async def main():
@@ -99,7 +104,7 @@ async def create(token: str = Form(...)):
             subprocess.Popen(["python", "bot.py"], cwd=bot_dir)
 
         threading.Thread(target=run_bot, daemon=True).start()
-        await asyncio.sleep(2)  # даём боту пару секунд на старт
+        await asyncio.sleep(2)
         await test_bot.session.close()
 
         return templates.TemplateResponse("success.html", {
@@ -110,6 +115,6 @@ async def create(token: str = Form(...)):
 
     except Exception as e:
         return HTMLResponse(
-            f"<h2 style='color:red;'>Ошибка: {str(e)}</h2><a href='/'>← Назад</a>",
+            f"<h2 style='color:red;'>Ошибка: {str(e)}</h2><p><a href='/'>← Назад</a></p>",
             status_code=400
         )
